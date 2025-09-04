@@ -1,11 +1,108 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import WeatherIndicators from './WeatherIndicators';
+import WeatherIcons from './WeatherIcons';
+import SunIcons from './SunIcons';
 
-const WeatherCard = ({ weather, unit, onRefresh }) => {
+// Composant pour l'affichage des prévisions horaires
+const HourlyForecast = ({ forecast, unit }) => {
+  if (!forecast || !forecast.hourly) return null;
+
+  // Préparer les données pour les 24 prochaines heures
+  const hourlyData = useMemo(() => {
+    return forecast.hourly.slice(0, 24).map(hour => ({
+      time: new Date(hour.dt * 1000).getHours() + 'h',
+      temp: Math.round(unit === 'metric' ? hour.temp : (hour.temp * 9/5) + 32),
+      pop: Math.round(hour.pop * 100), // Probabilité de précipitation
+    }));
+  }, [forecast.hourly, unit]);
+
+  return (
+    <div className="mt-6">
+      <h3 className="text-lg font-semibold text-gray-700 mb-3">Prévisions horaires</h3>
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={hourlyData}>
+            <defs>
+              <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+              </linearGradient>
+              <linearGradient id="popGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis 
+              dataKey="time" 
+              tick={{ fill: '#6b7280' }}
+              axisLine={{ stroke: '#d1d5db' }}
+              tickLine={{ stroke: '#d1d5db' }}
+            />
+            <YAxis 
+              yAxisId="temp"
+              orientation="left"
+              tick={{ fill: '#3b82f6' }}
+              axisLine={{ stroke: '#3b82f6' }}
+              tickLine={{ stroke: '#3b82f6' }}
+              domain={['dataMin - 2', 'dataMax + 2']}
+              tickFormatter={(value) => `${value}°${unit === 'metric' ? 'C' : 'F'}`}
+            />
+            <YAxis 
+              yAxisId="pop"
+              orientation="right"
+              tick={{ fill: '#8b5cf6' }}
+              axisLine={{ stroke: '#8b5cf6' }}
+              tickLine={{ stroke: '#8b5cf6' }}
+              domain={[0, 100]}
+              tickFormatter={(value) => `${value}%`}
+            />
+            <Tooltip 
+              formatter={(value, name) => 
+                name === 'Température' 
+                  ? [`${value}°${unit === 'metric' ? 'C' : 'F'}`, 'Température']
+                  : [`${value}%`, 'Précipitations']
+              }
+              labelFormatter={(label) => `Heure: ${label}`}
+            />
+            <Area 
+              yAxisId="temp"
+              type="monotone" 
+              dataKey="temp" 
+              name="Température"
+              stroke="#3b82f6"
+              fillOpacity={1} 
+              fill="url(#tempGradient)"
+            />
+            <Line 
+              yAxisId="pop"
+              type="monotone" 
+              dataKey="pop" 
+              name="Précipitations"
+              stroke="#8b5cf6"
+              dot={false}
+              strokeWidth={2}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+const WeatherCard = ({ weather, unit, onRefresh, forecast }) => {
+  // Animation de chargement
   if (!weather || !weather.main) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6 text-center">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="bg-white rounded-xl shadow-lg p-6 text-center"
+      >
         <p>Chargement des données météo...</p>
-      </div>
+      </motion.div>
     );
   }
 
@@ -21,213 +118,129 @@ const WeatherCard = ({ weather, unit, onRefresh }) => {
     });
   };
 
-  // Conversion de la direction du vent en points cardinaux
-  const getWindDirection = (degrees) => {
-    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-    const index = Math.round(degrees / 22.5) % 16;
-    return directions[index];
+  // Obtenir la couleur de fond en fonction de la température
+  const getTempColor = (temp) => {
+    if (temp >= 30) return 'from-red-500 to-orange-400';
+    if (temp >= 25) return 'from-orange-400 to-amber-400';
+    if (temp >= 20) return 'from-amber-400 to-yellow-400';
+    if (temp >= 15) return 'from-yellow-400 to-lime-400';
+    if (temp >= 10) return 'from-lime-400 to-emerald-400';
+    if (temp >= 5) return 'from-emerald-400 to-cyan-400';
+    if (temp >= 0) return 'from-cyan-400 to-blue-400';
+    return 'from-blue-400 to-indigo-400';
   };
 
-  const convertWindSpeed = (speed, unit) => {
-    if (unit === 'metric') {
-      return speed.toFixed(1);
-    } else {
-      return (speed * 2.23694).toFixed(1);
-    }
-  };
-
-  const formatLocalTime = (timestamp) => {
-    return new Date(timestamp * 1000).toLocaleTimeString('fr-FR');
-  };
-
-  const dayHours = Math.floor((weather.sys.sunset - weather.sys.sunrise) / 3600);
-  const dayMinutes = Math.floor(((weather.sys.sunset - weather.sys.sunrise) % 3600) / 60);
-
-  const {
-    coord,
-    weather: [weatherInfo],
-    main,
-    visibility,
-    wind,
-    clouds,
-    sys,
-    timezone,
-    name,
-    dt
-  } = weather;
+  const { main, weather: [weatherInfo], wind, clouds, sys, name, dt } = weather;
+  const tempColor = getTempColor(main.temp);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-      {/* En-tête avec ville et date */}
-      <div className="p-6 border-b border-gray-100">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">
-              {name}, {sys?.country}
-            </h2>
-            <p className="text-gray-500">{formatDate(dt)}</p>
-            <p className="text-lg mt-2 capitalize">{weatherInfo.description}</p>
-          </div>
-          <button 
-            onClick={onRefresh}
-            className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"
-            aria-label="Rafraîchir"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Température principale */}
-      <div className="p-6 border-b border-gray-100">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <img 
-              src={`http://openweathermap.org/img/wn/${weatherInfo.icon}@2x.png`} 
-              alt={weatherInfo.description}
-              className="w-24 h-24"
-            />
-            <div className="ml-4">
-              <span className="text-5xl font-bold">{Math.round(main.temp)}°</span>
-              <span className="text-gray-500 ml-2">{unit === 'metric' ? 'C' : 'F'}</span>
-            </div>
-          </div>
-          <div className="text-right">
-            <p>Ressenti: {Math.round(main.feels_like)}°</p>
-            <p>Min: {Math.round(main.temp_min)}° / Max: {Math.round(main.temp_max)}°</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Détails météo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
-        {/* Carte Vent */}
-        <div className="bg-white/80 p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
-          <h3 className="font-medium text-gray-700 mb-3 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
-            </svg>
-            Vent
-          </h3>
-          <div className="space-y-2">
-            <p className="text-gray-600">
-              <span className="font-medium">Vitesse:</span> {convertWindSpeed(wind.speed, unit)} {unit === 'metric' ? 'm/s' : 'mph'}
-            </p>
-            <p className="text-gray-600">
-              <span className="font-medium">Direction:</span> {getWindDirection(wind.deg)} ({wind.deg}°)
-            </p>
-            {wind.gust && (
-              <p className="text-gray-600">
-                <span className="font-medium">Rafales:</span> {convertWindSpeed(wind.gust, unit)} {unit === 'metric' ? 'm/s' : 'mph'}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Carte Humidité & Pression */}
-        <div className="bg-white/80 p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
-          <h3 className="font-medium text-gray-700 mb-3 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z" />
-            </svg>
-            Humidité & Pression
-          </h3>
-          <div className="space-y-2">
-            <p className="text-gray-600">
-              <span className="font-medium">Humidité:</span> {main.humidity}%
-            </p>
-            <p className="text-gray-600">
-              <span className="font-medium">Pression:</span> {main.pressure} hPa
-            </p>
-            {main.sea_level && (
-              <p className="text-gray-600">
-                <span className="font-medium">Niveau mer:</span> {main.sea_level} hPa
-              </p>
-            )}
-            {main.grnd_level && (
-              <p className="text-gray-600">
-                <span className="font-medium">Niveau sol:</span> {main.grnd_level} hPa
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Carte Visibilité & Nuages */}
-        <div className="bg-white/80 p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
-          <h3 className="font-medium text-gray-700 mb-3 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-              <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-            </svg>
-            Visibilité & Nuages
-          </h3>
-          <div className="space-y-2">
-            <p className="text-gray-600">
-              <span className="font-medium">Visibilité:</span> {(visibility / 1000).toFixed(1)} km
-            </p>
-            <p className="text-gray-600">
-              <span className="font-medium">Nuages:</span> {clouds.all}%
-            </p>
-            {weatherInfo?.main && (
-              <p className="text-gray-600 capitalize">
-                <span className="font-medium">Conditions:</span> {weatherInfo.description}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Carte Soleil */}
-        <div className="bg-white/80 p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
-          <h3 className="font-medium text-gray-700 mb-3 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-            </svg>
-            Soleil
-          </h3>
-          <div className="space-y-2">
-            <p className="text-gray-600">
-              <span className="font-medium">Lever:</span> {formatLocalTime(sys.sunrise)}
-            </p>
-            <p className="text-gray-600">
-              <span className="font-medium">Coucher:</span> {formatLocalTime(sys.sunset)}
-            </p>
-            <p className="text-gray-600">
-              <span className="font-medium">Durée du jour:</span> {dayHours}h{dayMinutes.toString().padStart(2, '0')}
-            </p>
-          </div>
-        </div>
-
-        {/* Carte Coordonnées */}
-        <div className="bg-white/80 p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all md:col-span-2">
-          <h3 className="font-medium text-gray-700 mb-3 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-            </svg>
-            Coordonnées
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={`${name}-${dt}`}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.5 }}
+        className="bg-white rounded-xl shadow-lg overflow-hidden"
+      >
+        {/* En-tête avec ville et date */}
+        <div className={`bg-gradient-to-r ${tempColor} p-6 text-white`}>
+          <div className="flex justify-between items-start">
             <div>
-              <p className="text-gray-600">
-                <span className="font-medium">Latitude:</span> {coord.lat}°
-              </p>
-              <p className="text-gray-600">
-                <span className="font-medium">Longitude:</span> {coord.lon}°
+              <h2 className="text-2xl font-bold">
+                {name}, {sys?.country}
+              </h2>
+              <p className="opacity-90">{formatDate(dt)}</p>
+              <p className="text-lg mt-2 capitalize flex items-center">
+                <span className="mr-2">
+                  <WeatherIcons icon={weatherInfo.icon} size={24} />
+                </span>
+                {weatherInfo.description}
               </p>
             </div>
-            <div>
-              <p className="text-gray-600">
-                <span className="font-medium">Fuseau horaire:</span> GMT{timezone >= 0 ? '+' : ''}{timezone / 3600}
+            <motion.button 
+              onClick={onRefresh}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              className="p-2 bg-white/20 rounded-full backdrop-blur-sm"
+              aria-label="Rafraîchir"
+            >
+              <SunIcons type="refresh" size={20} className="text-white" />
+            </motion.button>
+          </div>
+
+          {/* Température principale */}
+          <div className="mt-6 flex items-center justify-between">
+            <div className="text-6xl font-bold">
+              {Math.round(main.temp)}°
+              <span className="text-2xl opacity-90">{unit === 'metric' ? 'C' : 'F'}</span>
+            </div>
+            <div className="text-right">
+              <p className="text-lg">
+                <span className="opacity-90">Ressenti:</span> {Math.round(main.feels_like)}°
               </p>
-              <p className="text-gray-600">
-                <span className="font-medium">Ville:</span> {name}, {sys?.country}
+              <p className="text-lg">
+                <span className="opacity-90">Min:</span> {Math.round(main.temp_min)}° / 
+                <span className="opacity-90"> Max:</span> {Math.round(main.temp_max)}°
               </p>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+
+        {/* Indicateurs météo */}
+        <WeatherIndicators weather={weather} unit={unit} />
+
+        {/* Graphique des prévisions horaires */}
+        <div className="p-4">
+          <HourlyForecast forecast={forecast} unit={unit} />
+        </div>
+
+        {/* Lever et coucher du soleil */}
+        <div className="p-4 border-t border-gray-100">
+          <div className="flex justify-around items-center">
+            <motion.div 
+              className="text-center"
+              whileHover={{ scale: 1.05 }}
+            >
+              <div className="flex justify-center text-blue-500">
+                <SunIcons type="sunrise" size={32} />
+              </div>
+              <p className="text-sm text-gray-500 mt-1">Lever</p>
+              <p className="font-medium">
+                {new Date(sys.sunrise * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </motion.div>
+            
+            <motion.div 
+              className="text-center"
+              whileHover={{ scale: 1.05 }}
+            >
+              <div className="flex justify-center text-orange-500">
+                <SunIcons type="sunset" size={32} />
+              </div>
+              <p className="text-sm text-gray-500 mt-1">Coucher</p>
+              <p className="font-medium">
+                {new Date(sys.sunset * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </motion.div>
+            
+            <motion.div 
+              className="text-center"
+              whileHover={{ scale: 1.05 }}
+            >
+              <div className="flex justify-center text-yellow-500">
+                <SunIcons type="duration" size={32} />
+              </div>
+              <p className="text-sm text-gray-500 mt-1">Durée du jour</p>
+              <p className="font-medium">
+                {Math.floor((sys.sunset - sys.sunrise) / 3600)}h 
+                {Math.floor(((sys.sunset - sys.sunrise) % 3600) / 60).toString().padStart(2, '0')}min
+              </p>
+            </motion.div>
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 

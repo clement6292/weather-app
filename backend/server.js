@@ -1,4 +1,4 @@
-// server.js - Amélioration de la sécurité
+// server.js - Version corrigée et optimisée
 import express from "express";
 import axios from "axios";
 import dotenv from "dotenv";
@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import NodeCache from "node-cache";
 
 dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const cache = new NodeCache({ stdTTL: 600 }); // Cache de 10 minutes
@@ -20,9 +21,8 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Autoriser les requêtes sans origine (comme les apps mobiles ou Postman)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) === -1) {
       const msg = 'Origine non autorisée par CORS';
       return callback(new Error(msg), false);
@@ -40,10 +40,10 @@ app.use(cors(corsOptions));
 
 // Middleware pour logger les requêtes
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`, {
-    origin: req.headers.origin,
-    'user-agent': req.headers['user-agent']
-  });
+  console.log(`\n[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Query:', req.query);
+  console.log('Params:', req.params);
   next();
 });
 
@@ -58,17 +58,16 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+
 app.use(limiter);
 
 // Validation des entrées
 const validateCity = (city) => {
-  // Vérifie que la ville n'est pas vide et est une chaîne de caractères
   if (!city || typeof city !== 'string' || city.trim() === '') {
     console.log('Ville invalide (vide ou pas une chaîne)');
     return false;
   }
-  
-  // Autorise les lettres, espaces, tirets, apostrophes et caractères accentués
+
   const isValid = /^[a-zA-ZÀ-ÖØ-öø-ÿ\s'-]+$/.test(city);
   if (!isValid) {
     console.log(`Ville invalide (caractères non autorisés): ${city}`);
@@ -79,29 +78,29 @@ const validateCity = (city) => {
 // Middleware pour gérer les erreurs
 const errorHandler = (err, req, res, next) => {
   console.error('Erreur:', err);
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'Une erreur est survenue sur le serveur',
     details: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });};
+  });
+};
 
 // Route de test
 app.get('/api/test', (req, res) => {
   res.json({ status: 'ok', message: 'API fonctionnelle' });
 });
 
-// Route météo améliorée
+// Route météo actuelle
 app.get('/api/weather/:city', async (req, res, next) => {
   const city = req.params.city.trim();
   console.log('Ville reçue:', city);
-  
+
   if (!validateCity(city)) {
     console.log('Validation échouée pour la ville:', city);
-    return res.status(400).json({ 
-      error: "Nom de ville invalide. Utilisez uniquement des lettres, des espaces, des tirets et des apostrophes." 
+    return res.status(400).json({
+      error: "Nom de ville invalide. Utilisez uniquement des lettres, des espaces, des tirets et des apostrophes."
     });
   }
 
-  // Vérifier le cache
   const cacheKey = `weather_${city}`;
   const cachedData = cache.get(cacheKey);
   if (cachedData) {
@@ -110,35 +109,32 @@ app.get('/api/weather/:city', async (req, res, next) => {
   }
 
   try {
-    
     const response = await axios.get(
       `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=metric&appid=${process.env.OPENWEATHER_KEY}`,
-      { 
+      {
         headers: {
           'Accept': 'application/json'
         }
       }
     );
-    
+
     if (!response.data) {
       throw new Error('Aucune donnée reçue de l\'API OpenWeather');
     }
-    
-    // Mettre en cache la réponse
+
     cache.set(cacheKey, response.data);
-    
-    // Réponse avec en-têtes CORS explicites
+
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    
+
     res.json(response.data);
-    
+
   } catch (error) {
     console.error('Erreur API OpenWeather:', error);
-    
+
     let status = 500;
     let message = 'Erreur lors de la récupération des données météo';
-    
+
     if (error.response) {
       status = error.response.status;
       if (status === 404) message = 'Ville non trouvée';
@@ -149,15 +145,118 @@ app.get('/api/weather/:city', async (req, res, next) => {
       message = 'Le serveur météo ne répond pas';
       status = 504;
     }
-    
+
     res.status(status).json({ error: message });
+  }
+});
+
+// Route pour les prévisions météo sur 5 jours
+app.get('/api/forecast/:city', async (req, res) => {
+  const city = req.params.city.trim();
+  console.log('Prévisions demandées pour la ville:', city);
+
+  const cacheKey = `forecast_${city.toLowerCase()}`;
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    console.log('Prévisions récupérées du cache pour', city);
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    return res.json(cachedData);
+  }
+
+  try {
+    if (!city || typeof city !== 'string' || city.length < 2) {
+      return res.status(400).json({ error: 'Nom de ville invalide' });
+    }
+
+    console.log('Appel API OpenWeather pour', city);
+    const response = await axios.get('https://api.openweathermap.org/data/2.5/forecast', {
+      params: {
+        q: city,
+        units: 'metric',
+        appid: process.env.OPENWEATHER_KEY,
+        lang: 'fr',
+        cnt: 40
+      },
+      timeout: 10000
+    });
+
+    if (!response.data || !Array.isArray(response.data.list)) {
+      throw new Error('Format de réponse inattendu de l\'API');
+    }
+
+    const forecastsByDay = {};
+    response.data.list.forEach(item => {
+      const date = new Date(item.dt * 1000).toDateString();
+      if (!forecastsByDay[date]) forecastsByDay[date] = [];
+      forecastsByDay[date].push(item);
+    });
+
+    const dailyForecasts = Object.values(forecastsByDay)
+      .map(dayForecasts => {
+        return dayForecasts.reduce((prev, curr) => {
+          const prevHour = new Date(prev.dt * 1000).getHours();
+          const currHour = new Date(curr.dt * 1000).getHours();
+          return (Math.abs(currHour - 12) < Math.abs(prevHour - 12)) ? curr : prev;
+        });
+      })
+      .slice(0, 5);
+
+    const forecastData = {
+      city: response.data.city,
+      forecasts: dailyForecasts.map(item => ({
+        date: new Date(item.dt * 1000).toISOString().split('T')[0],
+        temp: Math.round(item.main.temp),
+        temp_min: Math.round(item.main.temp_min),
+        temp_max: Math.round(item.main.temp_max),
+        humidity: item.main.humidity,
+        description: item.weather[0].description,
+        icon: item.weather[0].icon
+      }))
+    };
+
+    cache.set(cacheKey, forecastData, 10800);
+
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Cache-Control', 'public, max-age=10800');
+
+    console.log(`Prévisions envoyées pour ${city} (${dailyForecasts.length} jours)`);
+    res.json(forecastData);
+
+  } catch (error) {
+    console.error('Erreur API OpenWeather Forecast:', error.message);
+    let status = 500;
+    let message = 'Erreur lors de la récupération des prévisions';
+    let details = null;
+
+    if (error.response) {
+      status = error.response.status;
+      if (status === 404) message = 'Ville non trouvée';
+      else if (status === 401) {
+        message = 'Clé API OpenWeather invalide';
+        details = 'Vérifiez votre clé API dans le fichier .env';
+        console.error('Clé API OpenWeather invalide !');
+      }
+      else if (status === 429) message = 'Limite de requêtes API atteinte';
+      else if (status === 400) details = error.response.data?.message;
+    } else if (error.request) {
+      message = 'Le serveur météo ne répond pas';
+      status = 504;
+    } else {
+      details = error.message;
+    }
+
+    const errorResponse = { error: message };
+    if (details) errorResponse.details = details;
+    res.status(status).json(errorResponse);
   }
 });
 
 // Route de vérification de l'API
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
@@ -165,7 +264,7 @@ app.get('/api/health', (req, res) => {
 
 // Gestion des routes non trouvées
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Route non trouvée',
     path: req.path,
     method: req.method

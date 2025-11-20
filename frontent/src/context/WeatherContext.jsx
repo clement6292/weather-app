@@ -136,6 +136,7 @@ export const WeatherProvider = ({ children }) => {
   });
   const [error, setError] = useState(null);
   const [unit, setUnit] = useState('metric');
+  const [theme, setTheme] = useState('light');
   const [recentSearches, setRecentSearches] = useState([]);
   const [cache, setCache] = useState({});
 
@@ -170,6 +171,16 @@ export const WeatherProvider = ({ children }) => {
       const savedSearches = localStorage.getItem('recentSearches');
       if (savedSearches) {
         setRecentSearches(JSON.parse(savedSearches));
+      }
+
+      // Charger le thème
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
+        setTheme(savedTheme);
+      } else {
+        // Détecter la préférence système
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setTheme(prefersDark ? 'dark' : 'light');
       }
     } catch (e) {
       console.error('Erreur lors du chargement du cache ou des recherches récentes:', e);
@@ -218,20 +229,35 @@ export const WeatherProvider = ({ children }) => {
   // Fonction pour ajouter une ville aux recherches récentes
   const addToRecentSearches = useCallback((city) => {
     if (!city || typeof city !== 'string') return;
-    
+
     setRecentSearches(prev => {
       const updated = [
         city,
         ...prev.filter(item => item.toLowerCase() !== city.toLowerCase())
       ].slice(0, 5);
-      
+
       try {
         localStorage.setItem('recentSearches', JSON.stringify(updated));
       } catch (e) {
         console.error('Erreur lors de la sauvegarde des recherches récentes:', e);
       }
-      
+
       return updated;
+    });
+  }, []);
+
+  // Fonction pour changer de thème
+  const toggleTheme = useCallback(() => {
+    setTheme(prevTheme => {
+      const newTheme = prevTheme === 'light' ? 'dark' : 'light';
+      try {
+        localStorage.setItem('theme', newTheme);
+        // Appliquer la classe au document
+        document.documentElement.classList.toggle('dark', newTheme === 'dark');
+      } catch (e) {
+        console.error('Erreur lors de la sauvegarde du thème:', e);
+      }
+      return newTheme;
     });
   }, []);
 
@@ -257,6 +283,7 @@ export const WeatherProvider = ({ children }) => {
     try {
       const response = await fetchWithRetry(
         `http://localhost:5000/api/weather/${encodeURIComponent(city)}`
+        // `https://back-weather.onrender.com/api/weather/${encodeURIComponent(city)}`
       );
       
       if (!response.data) {
@@ -323,6 +350,7 @@ export const WeatherProvider = ({ children }) => {
     try {
       const response = await fetchWithRetry(
         `http://localhost:5000/api/forecast/${encodeURIComponent(city)}`
+        // `https://back-weather.onrender.com/api/forecast/${encodeURIComponent(city)}`
       );
       
       if (!response.data) {
@@ -349,6 +377,65 @@ export const WeatherProvider = ({ children }) => {
     }
   }, [addToCache, getFromCache]);
 
+  // Fonction de géolocalisation
+  const getCurrentLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      const errorMsg = 'La géolocalisation n\'est pas supportée par ce navigateur';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    setLoading(prev => ({ ...prev, weather: true, forecast: true }));
+    setError(null);
+
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5 minutes
+        });
+      });
+
+      const { latitude, longitude } = position.coords;
+
+      // Utiliser l'API de géocodage inverse d'OpenWeather
+      const geoResponse = await fetchWithRetry(
+        `http://localhost:5000/api/weather/coords?lat=${latitude}&lon=${longitude}`
+      );
+
+      if (!geoResponse.data || !geoResponse.data.name) {
+        throw new Error('Impossible de déterminer votre ville actuelle');
+      }
+
+      const cityName = geoResponse.data.name;
+
+      // Récupérer la météo pour cette ville
+      const result = await getWeatherAndForecast(cityName);
+      return result;
+
+    } catch (error) {
+      console.error('Erreur de géolocalisation:', error);
+
+      let errorMessage = 'Erreur lors de la géolocalisation';
+
+      if (error.code === 1) {
+        errorMessage = 'Permission de géolocalisation refusée. Veuillez autoriser l\'accès à votre position.';
+      } else if (error.code === 2) {
+        errorMessage = 'Position indisponible. Vérifiez votre connexion GPS.';
+      } else if (error.code === 3) {
+        errorMessage = 'Timeout de géolocalisation. Veuillez réessayer.';
+      } else if (error.message.includes('géolocalisation n\'est pas supportée')) {
+        errorMessage = error.message;
+      }
+
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(prev => ({ ...prev, weather: false, forecast: false }));
+    }
+  }, []);
+
   // Fonction pour récupérer à la fois la météo et les prévisions
   const getWeatherAndForecast = useCallback(async (city) => {
     if (!city || typeof city !== 'string') {
@@ -356,9 +443,9 @@ export const WeatherProvider = ({ children }) => {
       setError(errorMsg);
       throw new Error(errorMsg);
     }
-    
+
     setError(null);
-    
+
     try {
       // Exécuter les deux appels en parallèle
       const [weatherData, forecastData] = await Promise.all([
@@ -370,7 +457,7 @@ export const WeatherProvider = ({ children }) => {
         addToRecentSearches(city);
         localStorage.setItem('lastCity', city);
       }
-      
+
       return { weather: weatherData, forecast: forecastData };
     } catch (error) {
       console.error('Erreur lors de la récupération des données:', error);
@@ -392,32 +479,40 @@ export const WeatherProvider = ({ children }) => {
       setCache(prev => {
         const now = Date.now();
         const updatedCache = {};
-        
+
         for (const [key, { data, timestamp }] of Object.entries(prev)) {
           if (now - timestamp < CACHE_EXPIRATION) {
             updatedCache[key] = { data, timestamp };
           }
         }
-        
+
         return updatedCache;
       });
     };
-    
+
     const interval = setInterval(cleanupExpiredCache, CACHE_EXPIRATION);
     return () => clearInterval(interval);
   }, []);
 
+  // Appliquer le thème au document
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+
   return (
-    <WeatherContext.Provider 
+    <WeatherContext.Provider
       value={{
         weather,
         forecast,
         loading,
         error,
         getWeather: getWeatherAndForecast,
+        getCurrentLocation,
         recentSearches,
         unit,
         setUnit,
+        theme,
+        toggleTheme,
         clearError: () => setError(null)
       }}
     >

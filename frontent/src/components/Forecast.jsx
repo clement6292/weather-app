@@ -4,7 +4,7 @@ import { fr } from 'date-fns/locale';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import WeatherIcons from './WeatherIcons';
 
-const Forecast = ({ forecast, unit }) => {
+const Forecast = ({ forecast, unit, theme = 'light' }) => {
   // Si les données sont les données de test
   if (forecast && forecast.test) {
     return (
@@ -63,13 +63,19 @@ const Forecast = ({ forecast, unit }) => {
 
   return (
     <div className="mt-8">
-      <h2 className="text-2xl font-semibold text-gray-800 mb-6">
+      <h2 className={`text-2xl font-semibold mb-6 ${
+        theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+      }`}>
         Prévisions sur 5 jours pour {forecast.city?.name || 'cette ville'}
       </h2>
       
       {/* Graphique de tendance */}
-      <div className="bg-white rounded-xl shadow-md p-3 sm:p-4 mb-6 sm:mb-8">
-        <h3 className="text-lg font-medium text-gray-700 mb-3 sm:mb-4">Tendance des températures</h3>
+      <div className={`rounded-xl shadow-md p-3 sm:p-4 mb-6 sm:mb-8 ${
+        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+      }`}>
+        <h3 className={`text-lg font-medium mb-3 sm:mb-4 ${
+          theme === 'dark' ? 'text-gray-200' : 'text-gray-700'
+        }`}>Tendance des températures</h3>
         <div className="h-48 sm:h-64 md:h-72 lg:h-80">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart 

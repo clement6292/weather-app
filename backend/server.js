@@ -1,4 +1,3 @@
-// server.js - Version corrigée et optimisée
 import express from "express";
 import axios from "axios";
 import dotenv from "dotenv";
@@ -40,10 +39,6 @@ app.use(cors(corsOptions));
 
 // Middleware pour logger les requêtes
 app.use((req, res, next) => {
-  console.log(`\n[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Query:', req.query);
-  console.log('Params:', req.params);
   next();
 });
 
@@ -89,13 +84,84 @@ app.get('/api/test', (req, res) => {
   res.json({ status: 'ok', message: 'API fonctionnelle' });
 });
 
-// Route météo actuelle
+// Route météo par coordonnées (géolocalisation)
+app.get('/api/weather/coords', async (req, res, next) => {
+  const { lat, lon } = req.query;
+
+  if (!lat || !lon) {
+    return res.status(400).json({
+      error: "Coordonnées requises (lat, lon)"
+    });
+  }
+
+  console.log('Requête météo coordonnées:', lat, lon);
+
+  const latNum = parseFloat(lat);
+  const lonNum = parseFloat(lon);
+
+  if (isNaN(latNum) || isNaN(lonNum) ||
+      latNum < -90 || latNum > 90 ||
+      lonNum < -180 || lonNum > 180) {
+    return res.status(400).json({
+      error: "Coordonnées invalides"
+    });
+  }
+
+  const cacheKey = `weather_coords_${latNum}_${lonNum}`;
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    return res.json(cachedData);
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.openweathermap.org/data/2.5/weather?lat=${latNum}&lon=${lonNum}&units=metric&appid=${process.env.OPENWEATHER_KEY}`,
+      {
+        headers: {
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    if (!response.data) {
+      throw new Error('Aucune donnée reçue de l\'API OpenWeather');
+    }
+
+    cache.set(cacheKey, response.data);
+
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    res.json(response.data);
+
+  } catch (error) {
+    console.error('Erreur API OpenWeather:', error);
+
+    let status = 500;
+    let message = 'Erreur lors de la récupération des données météo';
+
+    if (error.response) {
+      status = error.response.status;
+      if (status === 404) message = 'Ville non trouvée';
+      else if (status === 401) message = 'Clé API invalide';
+      else if (status === 429) message = 'Limite de requêtes API atteinte';
+      else if (status === 400) message = 'Requête invalide';
+    } else if (error.request) {
+      message = 'Le serveur météo ne répond pas';
+      status = 504;
+    }
+
+    res.status(status).json({ error: message });
+  }
+});
+
+// Route météo actuelle par ville
 app.get('/api/weather/:city', async (req, res, next) => {
   const city = req.params.city.trim();
-  console.log('Ville reçue:', city);
+  // console.log('Requête météo ville:', city);
 
   if (!validateCity(city)) {
-    console.log('Validation échouée pour la ville:', city);
+    // console.log('Validation échouée pour la ville:', city);
     return res.status(400).json({
       error: "Nom de ville invalide. Utilisez uniquement des lettres, des espaces, des tirets et des apostrophes."
     });
@@ -104,7 +170,7 @@ app.get('/api/weather/:city', async (req, res, next) => {
   const cacheKey = `weather_${city}`;
   const cachedData = cache.get(cacheKey);
   if (cachedData) {
-    console.log('Données récupérées du cache pour', city);
+    // console.log('Données récupérées du cache pour', city);
     return res.json(cachedData);
   }
 
@@ -153,12 +219,12 @@ app.get('/api/weather/:city', async (req, res, next) => {
 // Route pour les prévisions météo sur 5 jours
 app.get('/api/forecast/:city', async (req, res) => {
   const city = req.params.city.trim();
-  console.log('Prévisions demandées pour la ville:', city);
+  // console.log('Prévisions demandées pour la ville:', city);
 
   const cacheKey = `forecast_${city.toLowerCase()}`;
   const cachedData = cache.get(cacheKey);
   if (cachedData) {
-    console.log('Prévisions récupérées du cache pour', city);
+    // console.log('Prévisions récupérées du cache pour', city);
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     return res.json(cachedData);
@@ -169,7 +235,7 @@ app.get('/api/forecast/:city', async (req, res) => {
       return res.status(400).json({ error: 'Nom de ville invalide' });
     }
 
-    console.log('Appel API OpenWeather pour', city);
+    // console.log('Appel API OpenWeather pour', city);
     const response = await axios.get('https://api.openweathermap.org/data/2.5/forecast', {
       params: {
         q: city,
@@ -278,7 +344,7 @@ app.use(errorHandler);
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur démarré sur le port ${PORT}`);
   console.log('Environnement:', process.env.NODE_ENV || 'development');
-  console.log('Origines autorisées:', allowedOrigins);
+  // console.log('Origines autorisées:', allowedOrigins);
 });
 
 // Gestion correcte des arrêts

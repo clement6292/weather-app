@@ -20,7 +20,9 @@ const HourlyForecast = ({ forecast, unit }) => {
 
   return (
     <div className="mt-6">
-      <h3 className="text-lg font-semibold text-gray-700 mb-3">Prévisions horaires</h3>
+      <h3 className={`text-lg font-semibold mb-3 ${
+        theme === 'dark' ? 'text-gray-200' : 'text-gray-700'
+      }`}>Prévisions horaires</h3>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={hourlyData}>
@@ -92,14 +94,16 @@ const HourlyForecast = ({ forecast, unit }) => {
   );
 };
 
-const WeatherCard = ({ weather, unit, onRefresh, forecast }) => {
+const WeatherCard = ({ weather, unit, onRefresh, forecast, theme = 'light' }) => {
   // Animation de chargement
   if (!weather || !weather.main) {
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="bg-white rounded-xl shadow-lg p-6 text-center"
+        className={`rounded-xl shadow-lg p-6 text-center ${
+          theme === 'dark' ? 'bg-gray-700 text-gray-200' : 'bg-white text-gray-700'
+        }`}
       >
         <p>Chargement des données météo...</p>
       </motion.div>
@@ -118,20 +122,25 @@ const WeatherCard = ({ weather, unit, onRefresh, forecast }) => {
     });
   };
 
-  // Obtenir la couleur de fond en fonction de la température
-  const getTempColor = (temp) => {
-    if (temp >= 30) return 'from-red-500 to-orange-400';
-    if (temp >= 25) return 'from-orange-400 to-amber-400';
-    if (temp >= 20) return 'from-amber-400 to-yellow-400';
-    if (temp >= 15) return 'from-yellow-400 to-lime-400';
-    if (temp >= 10) return 'from-lime-400 to-emerald-400';
-    if (temp >= 5) return 'from-emerald-400 to-cyan-400';
-    if (temp >= 0) return 'from-cyan-400 to-blue-400';
-    return 'from-blue-400 to-indigo-400';
+  // Obtenir la couleur de fond en fonction de la température et des conditions météo
+  const getWeatherBackground = (temp, weatherMain) => {
+    const baseColors = {
+      Clear: temp >= 25 ? 'from-yellow-400 via-orange-400 to-red-500' :
+              temp >= 15 ? 'from-blue-300 via-cyan-400 to-blue-500' :
+              'from-blue-400 via-indigo-500 to-purple-600',
+      Clouds: 'from-gray-400 via-gray-500 to-gray-600',
+      Rain: 'from-blue-600 via-blue-700 to-indigo-800',
+      Snow: 'from-blue-100 via-gray-200 to-blue-200',
+      Thunderstorm: 'from-gray-700 via-purple-800 to-black',
+      Drizzle: 'from-blue-400 via-blue-500 to-blue-600',
+      Mist: 'from-gray-300 via-gray-400 to-gray-500'
+    };
+
+    return baseColors[weatherMain] || baseColors.Clear;
   };
 
   const { main, weather: [weatherInfo], wind, clouds, sys, name, dt } = weather;
-  const tempColor = getTempColor(main.temp);
+  const backgroundGradient = getWeatherBackground(main.temp, weatherInfo.main);
 
   return (
     <AnimatePresence mode="wait">
@@ -141,10 +150,56 @@ const WeatherCard = ({ weather, unit, onRefresh, forecast }) => {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.5 }}
-        className="bg-white rounded-xl shadow-lg overflow-hidden"
+        className={`rounded-xl shadow-lg overflow-hidden ${
+          theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+        }`}
       >
         {/* En-tête avec ville et date */}
-        <div className={`bg-gradient-to-r ${tempColor} p-6 text-white`}>
+        <div className={`bg-gradient-to-r ${backgroundGradient} p-6 text-white relative overflow-hidden`}>
+          {/* Animated weather effects */}
+          {weatherInfo.main === 'Rain' && (
+            <div className="absolute inset-0 opacity-30">
+              <div className="rain-animation">
+                {[...Array(20)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-0.5 h-4 bg-white rounded-full animate-bounce"
+                    style={{
+                      left: `${Math.random() * 100}%`,
+                      animationDelay: `${Math.random() * 2}s`,
+                      animationDuration: '0.5s'
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {weatherInfo.main === 'Snow' && (
+            <div className="absolute inset-0 opacity-40">
+              <div className="snow-animation">
+                {[...Array(15)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-1 h-1 bg-white rounded-full animate-ping"
+                    style={{
+                      left: `${Math.random() * 100}%`,
+                      animationDelay: `${Math.random() * 3}s`,
+                      animationDuration: '3s'
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {weatherInfo.main === 'Clear' && main.temp >= 20 && (
+            <div className="absolute top-2 right-2 opacity-20">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                className="w-8 h-8 border-2 border-white rounded-full border-t-transparent"
+              />
+            </div>
+          )}
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-2xl font-bold">
@@ -153,7 +208,7 @@ const WeatherCard = ({ weather, unit, onRefresh, forecast }) => {
               <p className="opacity-90">{formatDate(dt)}</p>
               <p className="text-lg mt-2 capitalize flex items-center">
                 <span className="mr-2">
-                  <WeatherIcons icon={weatherInfo.icon} size={24} />
+                  <WeatherIcons icon={weatherInfo.icon} size={24} animated={true} />
                 </span>
                 {weatherInfo.description}
               </p>
@@ -188,7 +243,7 @@ const WeatherCard = ({ weather, unit, onRefresh, forecast }) => {
         </div>
 
         {/* Indicateurs météo */}
-        <WeatherIndicators weather={weather} unit={unit} />
+        <WeatherIndicators weather={weather} unit={unit} theme={theme} />
 
         {/* Graphique des prévisions horaires */}
         <div className="p-4">
@@ -196,7 +251,9 @@ const WeatherCard = ({ weather, unit, onRefresh, forecast }) => {
         </div>
 
         {/* Lever et coucher du soleil */}
-        <div className="p-4 border-t border-gray-100">
+        <div className={`p-4 border-t ${
+          theme === 'dark' ? 'border-gray-600' : 'border-gray-100'
+        }`}>
           <div className="flex justify-around items-center">
             <motion.div 
               className="text-center"

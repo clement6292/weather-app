@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import IndicatorIcons from './IndicatorIcons';
 
-const WeatherIndicators = ({ weather, unit }) => {
+const WeatherIndicators = ({ weather, unit, theme = 'light' }) => {
   if (!weather || !weather.main) return null;
 
   const { main, visibility, wind, clouds } = weather;
@@ -110,12 +110,18 @@ const WeatherIndicators = ({ weather, unit }) => {
                   className={indicator.iconColor}
                 />
               </div>
-              <span className="text-sm font-medium text-gray-700">{indicator.label}</span>
+              <span className={`text-sm font-medium ${
+                theme === 'dark' ? 'text-white' : 'text-gray-700'
+              }`}>{indicator.label}</span>
             </div>
             <div className="ml-11">
-              <p className="text-lg font-semibold text-gray-800">{indicator.value}</p>
+              <p className={`text-lg font-semibold ${
+                theme === 'dark' ? 'text-white' : 'text-gray-800'
+              }`}>{indicator.value}</p>
               {indicator.extra && (
-                <p className="text-xs text-gray-500 mt-1">{indicator.extra}</p>
+                <p className={`text-xs mt-1 ${
+                  theme === 'dark' ? 'text-gray-300' : 'text-gray-500'
+                }`}>{indicator.extra}</p>
               )}
             </div>
           </motion.div>

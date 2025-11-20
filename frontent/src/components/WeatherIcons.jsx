@@ -1,11 +1,32 @@
 import React from 'react';
 
-const WeatherIcons = ({ icon, size = 64, className = '' }) => {
+const WeatherIcons = ({ icon, size = 64, className = '', animated = false }) => {
   const iconStyle = {
     width: size,
     height: size,
     filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))',
   };
+
+  // Animation styles
+  const getAnimationClass = (iconCode) => {
+    if (!animated) return '';
+
+    if (iconCode.startsWith('01d') || iconCode.startsWith('02d')) {
+      return 'animate-spin-slow'; // Slow rotation for sun
+    }
+    if (iconCode.includes('03') || iconCode.includes('04')) {
+      return 'animate-float'; // Floating for clouds
+    }
+    if (iconCode.includes('09') || iconCode.includes('10')) {
+      return 'animate-pulse'; // Pulse for rain
+    }
+    if (iconCode.includes('13')) {
+      return 'animate-bounce-slow'; // Slow bounce for snow
+    }
+    return '';
+  };
+
+  const animationClass = getAnimationClass(icon);
 
   const icons = {
     // Clear Sky (Day)
@@ -319,8 +340,6 @@ const WeatherIcons = ({ icon, size = 64, className = '' }) => {
       </svg>
     )
   };
-
-  return icons[icon] || null;
 };
 
 export default WeatherIcons;

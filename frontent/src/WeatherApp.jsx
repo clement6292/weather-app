@@ -6,25 +6,47 @@ import WeatherCard from './components/WeatherCard';
 import Forecast from './components/Forecast';
 
 // Composant Skeleton pour le chargement
-const WeatherCardSkeleton = () => (
-  <div className="bg-white rounded-xl shadow-md p-6 animate-pulse">
-    <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
-    <div className="h-8 bg-gray-200 rounded w-1/2 mb-6"></div>
-    <div className="h-4 bg-gray-200 rounded w-5/6 mb-2"></div>
-    <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+const WeatherCardSkeleton = ({ theme }) => (
+  <div className={`rounded-xl shadow-md p-6 animate-pulse ${
+    theme === 'dark' ? 'bg-gray-700' : 'bg-white'
+  }`}>
+    <div className={`h-6 rounded w-3/4 mb-4 ${
+      theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+    }`}></div>
+    <div className={`h-8 rounded w-1/2 mb-6 ${
+      theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+    }`}></div>
+    <div className={`h-4 rounded w-5/6 mb-2 ${
+      theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+    }`}></div>
+    <div className={`h-4 rounded w-2/3 ${
+      theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+    }`}></div>
   </div>
 );
 
-const ForecastSkeleton = () => (
+const ForecastSkeleton = ({ theme }) => (
   <div className="mt-8">
-    <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+    <div className={`h-6 rounded w-1/3 mb-4 ${
+      theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+    }`}></div>
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
       {[...Array(5)].map((_, i) => (
-        <div key={i} className="bg-white rounded-xl shadow-md p-4 animate-pulse">
-          <div className="h-5 bg-gray-200 rounded w-3/4 mb-3"></div>
-          <div className="h-12 bg-gray-200 rounded-full w-12 mx-auto my-4"></div>
-          <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+        <div key={i} className={`rounded-xl shadow-md p-4 animate-pulse ${
+          theme === 'dark' ? 'bg-gray-700' : 'bg-white'
+        }`}>
+          <div className={`h-5 rounded w-3/4 mb-3 ${
+            theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+          }`}></div>
+          <div className={`h-12 rounded-full w-12 mx-auto my-4 ${
+            theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+          }`}></div>
+          <div className={`h-4 rounded w-full mb-2 ${
+            theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+          }`}></div>
+          <div className={`h-4 rounded w-5/6 ${
+            theme === 'dark' ? 'bg-gray-600' : 'bg-gray-200'
+          }`}></div>
         </div>
       ))}
     </div>
@@ -39,9 +61,12 @@ const WeatherApp = () => {
     loading,
     error,
     getWeather,
+    getCurrentLocation,
     recentSearches,
     unit,
-    setUnit
+    setUnit,
+    theme,
+    toggleTheme
   } = useWeather();
 
   const handleSubmit = (e) => {
@@ -56,6 +81,16 @@ const WeatherApp = () => {
     getWeather(recentCity);
   };
 
+  const handleGeolocation = async () => {
+    try {
+      await getCurrentLocation();
+      setCity(''); // Clear search input
+    } catch (error) {
+      // Error is already handled in context
+      console.error('Erreur géolocalisation:', error);
+    }
+  };
+
   const toggleUnit = () => {
     setUnit(unit === 'metric' ? 'imperial' : 'metric');
   };
@@ -67,7 +102,11 @@ const WeatherApp = () => {
 
   return (
     <div
-      className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-4 md:p-8 transition-colors duration-300"
+      className={`min-h-screen p-4 md:p-8 transition-colors duration-300 ${
+        theme === 'dark'
+          ? 'bg-gradient-to-br from-gray-900 to-gray-800 text-white'
+          : 'bg-gradient-to-br from-blue-50 to-blue-100 text-gray-900'
+      }`}
       role="main"
       aria-label="Application météo"
     >
@@ -83,7 +122,9 @@ const WeatherApp = () => {
         </motion.h1>
 
         <motion.div
-          className="bg-white rounded-2xl shadow-xl p-6 mb-8 overflow-hidden"
+          className={`rounded-2xl shadow-xl p-6 mb-8 overflow-hidden ${
+            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+          }`}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
@@ -94,14 +135,62 @@ const WeatherApp = () => {
                 Météo en temps réel
               </span>
             </h2>
-            <div className="mt-2 md:mt-0">
+            <div className="mt-2 md:mt-0 flex gap-3">
+              <button
+                type="button"
+                onClick={handleGeolocation}
+                disabled={isLoading}
+                className={`inline-flex items-center px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  isLoading
+                    ? theme === 'dark'
+                      ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : theme === 'dark'
+                      ? 'bg-green-800 text-green-200 hover:bg-green-700 shadow-sm hover:shadow-md transform hover:-translate-y-0.5'
+                      : 'bg-green-50 text-green-700 hover:bg-green-100 shadow-sm hover:shadow-md transform hover:-translate-y-0.5'
+                }`}
+                aria-label="Utiliser ma position actuelle pour la météo"
+              >
+                <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="hidden sm:inline">Ma position</span>
+                <span className="sm:hidden">GPS</span>
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className={`inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
+                  theme === 'dark'
+                    ? 'bg-purple-800 text-purple-200 hover:bg-purple-700'
+                    : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                }`}
+                aria-label={`Changer de thème. Actuellement en mode ${theme === 'dark' ? 'sombre' : 'clair'}`}
+                aria-pressed={theme === 'dark'}
+              >
+                {theme === 'dark' ? (
+                  <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+                <span className="hidden sm:inline">{theme === 'dark' ? 'Clair' : 'Sombre'}</span>
+              </button>
               <button
                 type="button"
                 onClick={toggleUnit}
                 className={`inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
-                  unit === 'metric' 
-                    ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' 
-                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  unit === 'metric'
+                    ? theme === 'dark'
+                      ? 'bg-blue-800 text-blue-200 hover:bg-blue-700'
+                      : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : theme === 'dark'
+                      ? 'bg-amber-800 text-amber-200 hover:bg-amber-700'
+                      : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
                 }`}
                 aria-label={`Changer d'unité de température. Actuellement en degrés ${currentUnit}`}
                 aria-pressed={unit === 'metric'}
@@ -132,7 +221,11 @@ const WeatherApp = () => {
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   placeholder="Rechercher une ville..."
-                  className="block w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white transition-all duration-200 text-gray-800 placeholder-gray-400"
+                  className={`block w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${
+                    theme === 'dark'
+                      ? 'border-gray-600 bg-gray-700 text-white placeholder-gray-400 focus:bg-gray-600'
+                      : 'border-gray-200 bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400'
+                  }`}
                   aria-required="true"
                   aria-busy={isLoading}
                   disabled={isLoading}
@@ -185,13 +278,19 @@ const WeatherApp = () => {
           {/* Recent Searches Section */}
           {recentSearches.length > 0 && (
             <motion.div
-              className="mt-6 pt-6 border-t border-gray-100"
+              className={`mt-6 pt-6 border-t ${
+                theme === 'dark' ? 'border-gray-600' : 'border-gray-100'
+              }`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <h3 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
-                <svg className="h-4 w-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <h3 className={`text-sm font-medium mb-3 flex items-center ${
+                theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                <svg className={`h-4 w-4 mr-2 ${
+                  theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
+                }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Recherches récentes
@@ -201,7 +300,11 @@ const WeatherApp = () => {
                   <motion.button
                     key={index}
                     onClick={() => handleRecentSearch(search)}
-                    className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 flex items-center gap-1.5"
+                    className={`px-4 py-2 text-sm border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 flex items-center gap-1.5 ${
+                      theme === 'dark'
+                        ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
+                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                    }`}
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.98 }}
                     aria-label={`Voir la météo pour ${search}`}
@@ -222,7 +325,11 @@ const WeatherApp = () => {
           {error && (
             <motion.div
               key="error"
-              className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded"
+              className={`border-l-4 p-4 mb-6 rounded ${
+                theme === 'dark'
+                  ? 'bg-red-900 border-red-600 text-red-200'
+                  : 'bg-red-100 border-red-500 text-red-700'
+              }`}
               role="alert"
               aria-live="assertive"
               aria-atomic="true"
@@ -249,7 +356,7 @@ const WeatherApp = () => {
               aria-live="polite"
               aria-label="Chargement des données météo en cours"
             >
-              <WeatherCardSkeleton />
+              <WeatherCardSkeleton theme={theme} />
             </motion.div>
           ) : weather ? (
             <motion.section
@@ -262,7 +369,7 @@ const WeatherApp = () => {
               aria-atomic="true"
               aria-label={`Météo actuelle pour ${weather.name}`}
             >
-              <WeatherCard weather={weather} unit={unit} />
+              <WeatherCard weather={weather} unit={unit} theme={theme} />
             </motion.section>
           ) : null}
         </AnimatePresence>
@@ -279,7 +386,7 @@ const WeatherApp = () => {
               aria-live="polite"
               aria-label="Chargement des prévisions en cours"
             >
-              <ForecastSkeleton />
+              <ForecastSkeleton theme={theme} />
             </motion.div>
           ) : forecast ? (
             <motion.section
@@ -292,8 +399,10 @@ const WeatherApp = () => {
               aria-atomic="true"
               aria-label="Prévisions météorologiques"
             >
-              <h2 className="text-xl font-semibold text-gray-800 mb-4" tabIndex="0">Prévisions sur 5 jours</h2>
-              <Forecast forecast={forecast} unit={unit} />
+              <h2 className={`text-xl font-semibold mb-4 ${
+                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+              }`} tabIndex="0">Prévisions sur 5 jours</h2>
+              <Forecast forecast={forecast} unit={unit} theme={theme} />
             </motion.section>
           ) : null}
         </AnimatePresence>

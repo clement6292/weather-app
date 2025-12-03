@@ -190,7 +190,7 @@ const WeatherApp = () => {
                 Météo en temps réel
               </span>
             </h2>
-            <div className="mt-2 md:mt-0 flex gap-3">
+            <div className="mt-2 flex flex-wrap gap-2 md:gap-3 lg:flex-nowrap">
               <button
                 type="button"
                 onClick={handleGeolocation}

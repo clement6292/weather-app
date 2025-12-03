@@ -2,6 +2,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { NotificationService } from '../utils/notificationService';
+import { weatherCache } from '../utils/cache';
+import { weatherRateLimiter } from '../utils/rateLimiter';
 // AlertService sera accessible via l'API backend
 
 // Constantes pour le cache et la configuration
@@ -282,11 +284,18 @@ export const WeatherProvider = ({ children }) => {
     }
     
     const cacheKey = `weather_${city.toLowerCase()}`;
-    const cachedData = getFromCache(cacheKey);
+    const cachedData = weatherCache.get(cacheKey);
     
     if (cachedData) {
       setWeather(cachedData);
       return cachedData;
+    }
+    
+    // Vérifier le rate limiting
+    if (!weatherRateLimiter.canMakeRequest()) {
+      const errorMsg = `Limite de requêtes atteinte (${weatherRateLimiter.getRemainingRequests()} restantes). Patientez une minute.`;
+      setError(errorMsg);
+      throw new Error(errorMsg);
     }
     
     setLoading(prev => ({ ...prev, weather: true }));
@@ -395,7 +404,7 @@ export const WeatherProvider = ({ children }) => {
       
       // Mettre à jour le state et le cache
       setWeather(response.data);
-      addToCache(cacheKey, response.data);
+      weatherCache.set(cacheKey, response.data);
       
       return response.data;
       
@@ -427,7 +436,7 @@ export const WeatherProvider = ({ children }) => {
     } finally {
       setLoading(prev => ({ ...prev, weather: false }));
     }
-  }, [addToCache, getFromCache]);
+  }, []);
 
 
 
@@ -438,7 +447,7 @@ export const WeatherProvider = ({ children }) => {
     }
     
     const cacheKey = `forecast_${city.toLowerCase()}`;
-    const cachedData = getFromCache(cacheKey);
+    const cachedData = weatherCache.get(cacheKey);
     
     if (cachedData) {
       setForecast(cachedData);
@@ -464,7 +473,7 @@ export const WeatherProvider = ({ children }) => {
       
       // Mettre à jour le state et le cache
       setForecast(response.data);
-      addToCache(cacheKey, response.data);
+      weatherCache.set(cacheKey, response.data);
       
       return response.data;
       
@@ -475,7 +484,7 @@ export const WeatherProvider = ({ children }) => {
     } finally {
       setLoading(prev => ({ ...prev, forecast: false }));
     }
-  }, [addToCache, getFromCache]);
+  }, []);
 
   // Fonction de géolocalisation
   const getCurrentLocation = useCallback(async () => {

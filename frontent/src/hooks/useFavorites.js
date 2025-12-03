@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
+import { weatherCache } from '../utils/cache';
+import { weatherRateLimiter } from '../utils/rateLimiter';
 
 const MAX_FAVORITES = 6;
 const SYNC_INTERVAL = 15 * 60 * 1000; // 15 minutes (réduit la fréquence)
@@ -88,6 +90,23 @@ export const useFavorites = () => {
   const syncFavorites = useCallback(async () => {
     if (favorites.length === 0 || syncInProgress.current) return;
 
+    // Vérifier le rate limiting
+    if (!weatherRateLimiter.canMakeRequest()) {
+      setError(`Limite de requêtes atteinte. ${weatherRateLimiter.getRemainingRequests()} requêtes restantes.`);
+      return;
+    }
+
+    // Vérifier le cache pour chaque ville
+    const citiesToUpdate = favorites.filter(fav => {
+      const cacheKey = `weather_${fav.name.toLowerCase()}`;
+      return !weatherCache.get(cacheKey);
+    });
+
+    if (citiesToUpdate.length === 0) {
+      console.log('Toutes les données sont en cache');
+      return;
+    }
+
     syncInProgress.current = true;
     setLoading(true);
     setError(null);
@@ -102,8 +121,8 @@ export const useFavorites = () => {
         console.error('Erreur alertes personnalisées:', e);
       }
 
-      // Construire l'URL - nettoyer les noms de villes
-      const cityNames = favorites
+      // Construire l'URL - seulement les villes non mises en cache
+      const cityNames = citiesToUpdate
         .map(fav => fav.name.trim())
         .filter(name => name.length > 0)
         .join(',');
@@ -121,11 +140,24 @@ export const useFavorites = () => {
       const response = await axios.get(url, { timeout: 15000 });
       const { success, errors, data } = response.data;
 
+      // Mettre en cache les nouvelles données
+      Object.entries(data).forEach(([cityKey, weatherData]) => {
+        weatherCache.set(`weather_${cityKey}`, weatherData);
+      });
+
       // Mettre à jour les favoris avec les nouvelles données
       const updatedFavorites = favorites.map(favorite => {
         const cityKey = favorite.name.toLowerCase();
+        const cachedData = weatherCache.get(`weather_${cityKey}`);
         
-        if (success.includes(favorite.name) && data[cityKey]) {
+        if (cachedData) {
+          return {
+            ...favorite,
+            weather: cachedData,
+            lastUpdate: Date.now(),
+            error: null
+          };
+        } else if (success.includes(favorite.name) && data[cityKey]) {
           return {
             ...favorite,
             weather: data[cityKey],

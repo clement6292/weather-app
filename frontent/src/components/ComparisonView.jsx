@@ -41,7 +41,7 @@ const ComparisonView = ({ favorites, unit, theme }) => {
 
   return (
     <div className={`rounded-xl p-6 ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} shadow-lg`}>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h2 className={`text-xl font-semibold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
           Comparaison des villes
         </h2>
@@ -49,7 +49,7 @@ const ComparisonView = ({ favorites, unit, theme }) => {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
-          className={`px-3 py-2 rounded-lg border ${
+          className={`px-3 py-2 rounded-lg border text-sm sm:text-base ${
             theme === 'dark'
               ? 'bg-gray-700 border-gray-600 text-white'
               : 'bg-white border-gray-300 text-gray-900'
@@ -63,22 +63,22 @@ const ComparisonView = ({ favorites, unit, theme }) => {
 
       {/* Vue tableau */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-full">
           <thead>
             <tr className={`border-b ${theme === 'dark' ? 'border-gray-600' : 'border-gray-200'}`}>
               <th className={`text-left py-3 px-2 font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 Ville
               </th>
-              <th className={`text-center py-3 px-2 font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              <th className={`text-center py-3 px-2 font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'} hidden sm:table-cell`}>
                 Météo
               </th>
               <th className={`text-center py-3 px-2 font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                Température
+                Temp.
               </th>
-              <th className={`text-center py-3 px-2 font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              <th className={`text-center py-3 px-2 font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'} hidden md:table-cell`}>
                 Ressenti
               </th>
-              <th className={`text-center py-3 px-2 font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+              <th className={`text-center py-3 px-2 font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'} hidden lg:table-cell`}>
                 Humidité
               </th>
             </tr>
@@ -98,16 +98,20 @@ const ComparisonView = ({ favorites, unit, theme }) => {
                 >
                   <td className="py-4 px-2">
                     <div>
-                      <div className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                      <div className={`font-medium text-sm sm:text-base ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                         {favorite.name}
                       </div>
-                      <div className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                      <div className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                         {favorite.weather.sys?.country}
+                      </div>
+                      {/* Afficher l'icône sur mobile */}
+                      <div className="sm:hidden mt-1">
+                        <WeatherIcons icon={favorite.weather.weather[0]?.icon} size={20} />
                       </div>
                     </div>
                   </td>
                   
-                  <td className="py-4 px-2 text-center">
+                  <td className="py-4 px-2 text-center hidden sm:table-cell">
                     <div className="flex flex-col items-center">
                       <WeatherIcons icon={favorite.weather.weather[0]?.icon} size={32} />
                       <span className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -117,18 +121,22 @@ const ComparisonView = ({ favorites, unit, theme }) => {
                   </td>
                   
                   <td className="py-4 px-2 text-center">
-                    <div className={`text-2xl font-bold ${getTempColor(temp)}`}>
+                    <div className={`text-xl sm:text-2xl font-bold ${getTempColor(temp)}`}>
                       {temp}°{unit === 'metric' ? 'C' : 'F'}
+                    </div>
+                    {/* Afficher ressenti sur mobile */}
+                    <div className={`md:hidden text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Ressenti {feelsLike}°
                     </div>
                   </td>
                   
-                  <td className="py-4 px-2 text-center">
+                  <td className="py-4 px-2 text-center hidden md:table-cell">
                     <div className={`text-lg ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                       {feelsLike}°
                     </div>
                   </td>
                   
-                  <td className="py-4 px-2 text-center">
+                  <td className="py-4 px-2 text-center hidden lg:table-cell">
                     <div className={`text-lg ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                       {favorite.weather.main.humidity}%
                     </div>

@@ -274,7 +274,7 @@ const WeatherRadar = ({ theme, weather }) => {
           Radar Météo
         </h2>
         
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3 lg:flex-nowrap">
           {/* Sélecteur de vue de base */}
           <div className="relative">
             <select
@@ -424,7 +424,7 @@ const WeatherRadar = ({ theme, weather }) => {
 
       {/* Contrôle de vitesse d'animation */}
       {isPlaying && (
-        <div className="mb-4 flex items-center space-x-3">
+        <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
           <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
             Vitesse:
           </span>
@@ -466,16 +466,16 @@ const WeatherRadar = ({ theme, weather }) => {
       </div>
 
       {/* Légende */}
-      <div className="mt-4 flex items-center justify-between text-xs">
+      <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
         <div className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
           <span className="font-medium">Vue:</span> {baseLayer === 'satellite' ? 'Satellite haute résolution' : 'Plan des rues'}
-          <span className="ml-4 font-medium">Légende:</span>
+          <span className="ml-2 sm:ml-4 font-medium">Légende:</span>
           {currentLayer === 'precipitation' && ' Bleu = Pluie, Blanc = Neige'}
           {currentLayer === 'clouds' && ' Blanc = Nuages épais'}
           {currentLayer === 'temperature' && ' Rouge = Chaud, Bleu = Froid'}
           {currentLayer === 'wind' && ' Flèches = Direction du vent'}
         </div>
-        <div className={`${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+        <div className={`${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'} text-right sm:text-left`}>
           Données: OpenWeather • Images: {baseLayer === 'satellite' ? 'Esri/Maxar' : 'OpenStreetMap'}
         </div>
       </div>

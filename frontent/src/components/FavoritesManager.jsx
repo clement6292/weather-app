@@ -31,7 +31,7 @@ const FavoritesManager = ({ theme, unit, onCitySelect }) => {
     <div className={`rounded-xl p-6 ${
       theme === 'dark' ? 'bg-gray-800' : 'bg-white'
     } shadow-lg`}>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h2 className={`text-xl font-semibold ${
             theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
@@ -45,7 +45,7 @@ const FavoritesManager = ({ theme, unit, onCitySelect }) => {
           </p>
         </div>
         
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <button
             onClick={syncFavorites}
             disabled={loading || favorites.length === 0}

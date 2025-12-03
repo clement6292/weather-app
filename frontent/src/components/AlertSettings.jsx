@@ -36,7 +36,7 @@ const AlertSettings = ({ theme, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-slate-700/20 backdrop-blur-sm flex items-center justify-center" style={{ zIndex: 9999 }}>
       <div className={`rounded-xl p-6 max-w-md w-full mx-4 ${
         theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
       }`}>

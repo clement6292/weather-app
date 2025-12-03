@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWeather } from './context/WeatherContext';
+import { useDebounce } from './hooks/useDebounce';
 import WeatherCard from './components/WeatherCard';
 import Forecast from './components/Forecast';
 import AlertBanner from './components/AlertBanner';
@@ -62,6 +63,7 @@ const WeatherApp = () => {
   const [city, setCity] = useState('');
   const [showAlertSettings, setShowAlertSettings] = useState(false);
   const [viewMode, setViewMode] = useState('single'); // 'single' ou 'multi'
+  const debouncedCity = useDebounce(city, 500); // 500ms de délai
   const {
     weather,
     forecast,
@@ -405,7 +407,7 @@ const WeatherApp = () => {
                 </svg>
                 Recherches récentes
               </h3>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
                 {recentSearches.map((search, index) => (
                   <motion.button
                     key={index}

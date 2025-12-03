@@ -4,6 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useWeather } from './context/WeatherContext';
 import WeatherCard from './components/WeatherCard';
 import Forecast from './components/Forecast';
+import AlertBanner from './components/AlertBanner';
+import NotificationButton from './components/NotificationButton';
+import AlertSettings from './components/AlertSettings';
+import FavoritesManager from './components/FavoritesManager';
+import WeatherRadar from './components/WeatherRadar';
 
 // Composant Skeleton pour le chargement
 const WeatherCardSkeleton = ({ theme }) => (
@@ -55,6 +60,8 @@ const ForecastSkeleton = ({ theme }) => (
 
 const WeatherApp = () => {
   const [city, setCity] = useState('');
+  const [showAlertSettings, setShowAlertSettings] = useState(false);
+  const [viewMode, setViewMode] = useState('single'); // 'single' ou 'multi'
   const {
     weather,
     forecast,
@@ -66,8 +73,23 @@ const WeatherApp = () => {
     unit,
     setUnit,
     theme,
-    toggleTheme
+    toggleTheme,
+    alerts,
+    dismissAlert
   } = useWeather();
+
+  // Badge d'urgence
+  const criticalAlerts = alerts.filter(alert => alert.severity === 'critical').length;
+  
+  // Mettre à jour le titre de la page avec badge
+  useEffect(() => {
+    const originalTitle = 'Application Météo';
+    if (criticalAlerts > 0) {
+      document.title = `(${criticalAlerts}) ${originalTitle} - Alertes !`;
+    } else {
+      document.title = originalTitle;
+    }
+  }, [criticalAlerts]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -79,6 +101,16 @@ const WeatherApp = () => {
   const handleRecentSearch = (recentCity) => {
     setCity(recentCity);
     getWeather(recentCity);
+  };
+
+  const handleCitySelect = (cityName, weatherData) => {
+    setCity(cityName);
+    // Utiliser les données déjà chargées si disponibles
+    if (weatherData) {
+      // Simuler la sélection depuis les favoris
+      setViewMode('single');
+    }
+    getWeather(cityName);
   };
 
   const handleGeolocation = async () => {
@@ -120,6 +152,29 @@ const WeatherApp = () => {
         >
           Application Météo
         </motion.h1>
+
+        {/* Alertes météo */}
+        <AlertBanner 
+          alerts={alerts} 
+          theme={theme} 
+          onDismiss={dismissAlert}
+        />
+
+        {/* Vue Multi-Villes */}
+        {viewMode === 'multi' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-8"
+          >
+            <FavoritesManager 
+              theme={theme}
+              unit={unit}
+              onCitySelect={handleCitySelect}
+            />
+          </motion.div>
+        )}
 
         <motion.div
           className={`rounded-2xl shadow-xl p-6 mb-8 overflow-hidden ${
@@ -199,6 +254,49 @@ const WeatherApp = () => {
                 <span className="text-lg font-semibold">°{unit === 'metric' ? 'C' : 'F'}</span>
                 <span className="ml-2 text-sm hidden sm:inline">{unit === 'metric' ? 'Celsius' : 'Fahrenheit'}</span>
               </button>
+              <NotificationButton theme={theme} />
+              <button
+                onClick={() => setViewMode(viewMode === 'single' ? 'multi' : 'single')}
+                className={`inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
+                  viewMode === 'multi'
+                    ? theme === 'dark'
+                      ? 'bg-cyan-800 text-cyan-200 hover:bg-cyan-700'
+                      : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'
+                    : theme === 'dark'
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                title={`Basculer en mode ${viewMode === 'single' ? 'multi-villes' : 'ville unique'}`}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {viewMode === 'single' ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  )}
+                </svg>
+                {viewMode === 'single' ? 'Multi' : 'Simple'}
+              </button>
+              <button
+                onClick={() => setShowAlertSettings(true)}
+                className={`relative inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
+                  theme === 'dark'
+                    ? 'bg-indigo-800 text-indigo-200 hover:bg-indigo-700'
+                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                }`}
+                title="Configurer les alertes personnalisées"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Alertes
+                {criticalAlerts > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                    {criticalAlerts}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
           
@@ -274,6 +372,18 @@ const WeatherApp = () => {
               </button>
             </div>
           </form>
+
+          {/* Radar Météo */}
+          {weather && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="mt-6"
+            >
+              <WeatherRadar weather={weather} theme={theme} />
+            </motion.div>
+          )}
 
           {/* Recent Searches Section */}
           {recentSearches.length > 0 && (
@@ -399,13 +509,22 @@ const WeatherApp = () => {
               aria-atomic="true"
               aria-label="Prévisions météorologiques"
             >
-              <h2 className={`text-xl font-semibold mb-4 ${
-                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
-              }`} tabIndex="0">Prévisions sur 5 jours</h2>
+              
               <Forecast forecast={forecast} unit={unit} theme={theme} />
             </motion.section>
           ) : null}
         </AnimatePresence>
+
+
+
+        
+        {/* Modal alertes personnalisées */}
+        {showAlertSettings && (
+          <AlertSettings 
+            theme={theme} 
+            onClose={() => setShowAlertSettings(false)}
+          />
+        )}
       </div>
     </div>
   );

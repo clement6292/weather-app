@@ -1,9 +1,11 @@
 // src/context/WeatherContext.jsx
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { NotificationService } from '../utils/notificationService';
+// AlertService sera accessible via l'API backend
 
 // Constantes pour le cache et la configuration
-const CACHE_EXPIRATION = 10 * 60 * 1000; // 10 minutes en millisecondes
+const CACHE_EXPIRATION = 15 * 60 * 1000; // 15 minutes (plus long pour éviter les requêtes)
 const MAX_RETRIES = 2;
 const RETRY_DELAY = 1000; // 1 seconde
 
@@ -139,6 +141,10 @@ export const WeatherProvider = ({ children }) => {
   const [theme, setTheme] = useState('light');
   const [recentSearches, setRecentSearches] = useState([]);
   const [cache, setCache] = useState({});
+  const [alerts, setAlerts] = useState([]);
+  const [dismissedAlerts, setDismissedAlerts] = useState([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [alertTimeouts, setAlertTimeouts] = useState({});
 
   // Charger les données mises en cache et les recherches récentes au démarrage
   useEffect(() => {
@@ -181,6 +187,12 @@ export const WeatherProvider = ({ children }) => {
         // Détecter la préférence système
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         setTheme(prefersDark ? 'dark' : 'light');
+      }
+      
+      // Charger les préférences de notifications
+      const savedNotifications = localStorage.getItem('notificationsEnabled');
+      if (savedNotifications === 'true' && 'Notification' in window && Notification.permission === 'granted') {
+        setNotificationsEnabled(true);
       }
     } catch (e) {
       console.error('Erreur lors du chargement du cache ou des recherches récentes:', e);
@@ -281,10 +293,26 @@ export const WeatherProvider = ({ children }) => {
     setError(null);
     
     try {
-      const response = await fetchWithRetry(
-        `http://localhost:5000/api/weather/${encodeURIComponent(city)}`
-        // `https://back-weather.onrender.com/api/weather/${encodeURIComponent(city)}`
-      );
+      // Récupérer les alertes personnalisées
+      let customAlerts = null;
+      try {
+        const saved = localStorage.getItem('customAlerts');
+        customAlerts = saved ? JSON.parse(saved) : null;
+      } catch (e) {
+        console.error('Erreur chargement alertes personnalisées:', e);
+      }
+      
+      // Construire l'URL avec les alertes personnalisées
+      let url = `http://localhost:5000/api/weather/${encodeURIComponent(city)}`;
+      if (customAlerts) {
+        url += `?customAlerts=${encodeURIComponent(JSON.stringify(customAlerts))}`;
+      }
+      
+      const response = await fetchWithRetry(url);
+
+      console.log("La réponse entière de l'API :", response);
+      console.log("Alertes reçues:", response.data.alerts);
+      
       
       if (!response.data) {
         throw new Error('Aucune donnée météo reçue du serveur');
@@ -293,6 +321,76 @@ export const WeatherProvider = ({ children }) => {
       // Valider les données reçues
       if (!validateData(response.data, weatherSchema)) {
         throw new Error('Données météo invalides reçues du serveur');
+      }
+      
+      // Extraire les alertes si présentes
+      if (response.data.alerts) {
+        let allAlerts = [...response.data.alerts];
+        
+        // Vérifier les prévisions pour "pluie demain" si disponibles
+        if (forecast) {
+          try {
+            const customAlerts = JSON.parse(localStorage.getItem('customAlerts') || '{}');
+            if (customAlerts.rainTomorrow) {
+              console.log('Vérification pluie demain activée');
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              const tomorrowStr = tomorrow.toISOString().split('T')[0];
+              
+              console.log('Recherche prévision pour:', tomorrowStr);
+              console.log('Prévisions disponibles:', forecast.forecasts?.map(f => f.date));
+              
+              const tomorrowForecast = forecast.forecasts?.find(f => f.date === tomorrowStr);
+              
+              if (tomorrowForecast) {
+                console.log('Prévision demain:', tomorrowForecast.description);
+                if (tomorrowForecast.description.toLowerCase().includes('rain')) {
+                  console.log('ALERTE PLUIE DEMAIN détectée !');
+                  allAlerts.push({
+                    type: 'custom_rain_tomorrow',
+                    severity: 'info',
+                    title: 'Pluie prévue demain',
+                    message: `Il va pleuvoir demain: ${tomorrowForecast.description}`,
+                    icon: 'rain',
+                    timestamp: Date.now(),
+                    id: `rain_tomorrow_${Date.now()}`
+                  });
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Erreur vérification pluie demain:', e);
+          }
+        }
+        
+        // Effacer les anciens timeouts
+        Object.values(alertTimeouts).forEach(timeout => clearTimeout(timeout));
+        setAlertTimeouts({});
+        
+        setAlerts(allAlerts);
+        
+        // Programmer la disparition automatique après 5 secondes
+        const newTimeouts = {};
+        allAlerts.forEach(alert => {
+          newTimeouts[alert.id] = setTimeout(() => {
+            setAlerts(prev => prev.filter(a => a.id !== alert.id));
+            setAlertTimeouts(prev => {
+              const updated = { ...prev };
+              delete updated[alert.id];
+              return updated;
+            });
+          }, 5000);
+        });
+        setAlertTimeouts(newTimeouts);
+        
+        // Envoyer notifications pour nouvelles alertes critiques
+        if (notificationsEnabled) {
+          allAlerts.forEach(alert => {
+            if (NotificationService.shouldNotify(alert)) {
+              NotificationService.showNotification(alert);
+            }
+          });
+        }
       }
       
       // Mettre à jour le state et le cache
@@ -314,7 +412,7 @@ export const WeatherProvider = ({ children }) => {
         } else if (error.response.status === 401) {
           errorMessage = 'Erreur d\'authentification avec le service météo';
         } else if (error.response.status === 429) {
-          errorMessage = 'Trop de requêtes, veuillez réessayer plus tard';
+          errorMessage = 'Limite de requêtes atteinte. Patientez 2-3 minutes avant de rechercher à nouveau.';
         } else if (error.response.status >= 500) {
           errorMessage = 'Le serveur rencontre des difficultés. Veuillez réessayer plus tard.';
         }
@@ -330,6 +428,8 @@ export const WeatherProvider = ({ children }) => {
       setLoading(prev => ({ ...prev, weather: false }));
     }
   }, [addToCache, getFromCache]);
+
+
 
   // Fonction pour récupérer les prévisions
   const getForecast = useCallback(async (city) => {
@@ -445,23 +545,25 @@ export const WeatherProvider = ({ children }) => {
     }
 
     setError(null);
+    setLoading({ weather: true, forecast: true });
 
     try {
-      // Exécuter les deux appels en parallèle
-      const [weatherData, forecastData] = await Promise.all([
-        getWeather(city),
-        getForecast(city)
-      ]);
-
+      // Requêtes en séquentiel pour éviter les doublons
+      const weatherData = await getWeather(city);
+      
       if (weatherData) {
+        const forecastData = await getForecast(city);
+        
         addToRecentSearches(city);
         localStorage.setItem('lastCity', city);
+        
+        return { weather: weatherData, forecast: forecastData };
       }
-
-      return { weather: weatherData, forecast: forecastData };
     } catch (error) {
       console.error('Erreur lors de la récupération des données:', error);
-      throw error; // Propage l'erreur pour permettre une gestion spécifique dans les composants
+      throw error;
+    } finally {
+      setLoading({ weather: false, forecast: false });
     }
   }, [getWeather, getForecast, addToRecentSearches]);
 
@@ -499,6 +601,13 @@ export const WeatherProvider = ({ children }) => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  // Nettoyer les timeouts au démontage
+  useEffect(() => {
+    return () => {
+      Object.values(alertTimeouts).forEach(timeout => clearTimeout(timeout));
+    };
+  }, [alertTimeouts]);
+
   return (
     <WeatherContext.Provider
       value={{
@@ -513,7 +622,37 @@ export const WeatherProvider = ({ children }) => {
         setUnit,
         theme,
         toggleTheme,
-        clearError: () => setError(null)
+        clearError: () => setError(null),
+        alerts,
+
+        dismissAlert: (alertId) => {
+          // Annuler le timeout si l'alerte est manuellement fermée
+          if (alertTimeouts[alertId]) {
+            clearTimeout(alertTimeouts[alertId]);
+            setAlertTimeouts(prev => {
+              const updated = { ...prev };
+              delete updated[alertId];
+              return updated;
+            });
+          }
+          setDismissedAlerts(prev => [...prev, alertId]);
+          setAlerts(prev => prev.filter(alert => alert.id !== alertId));
+        },
+        notificationsEnabled,
+        enableNotifications: async () => {
+          try {
+            const granted = await NotificationService.requestPermission();
+            if (granted) {
+              await NotificationService.registerServiceWorker();
+              setNotificationsEnabled(true);
+              localStorage.setItem('notificationsEnabled', 'true');
+            }
+            return granted;
+          } catch (error) {
+            console.error('Erreur notifications:', error);
+            return false;
+          }
+        }
       }}
     >
       {children}

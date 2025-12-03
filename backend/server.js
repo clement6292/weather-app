@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import NodeCache from "node-cache";
+import { AlertService } from "./services/alertService.js";
 
 dotenv.config();
 
@@ -45,16 +46,31 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
+// Rate limiting - Très permissif pour le développement
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limite chaque IP à 100 requêtes par fenêtre
-  message: { error: "Trop de requêtes, veuillez réessayer plus tard." },
+  windowMs: 1 * 60 * 1000, // 1 minute seulement
+  max: 1000, // Beaucoup plus de requêtes
+  message: { error: "Limite temporaire atteinte, réessayez dans 30 secondes." },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip complètement en développement local
+    const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+    if (isLocalhost) return true;
+    
+    // Skip pour cache et radar
+    const cacheKey = req.path.includes('/weather/') ? `weather_${req.params.city}` : 
+                     req.path.includes('/forecast/') ? `forecast_${req.params.city}` : null;
+    return (cacheKey && cache.has(cacheKey)) || req.path.includes('/radar/');
+  }
 });
 
-app.use(limiter);
+// Appliquer le rate limiting seulement en production
+if (process.env.NODE_ENV === 'production') {
+  app.use(limiter);
+} else {
+  console.log('Rate limiting désactivé en mode développement');
+}
 
 // Validation des entrées
 const validateCity = (city) => {
@@ -155,22 +171,93 @@ app.get('/api/weather/coords', async (req, res, next) => {
   }
 });
 
+// Route pour récupérer plusieurs villes en une fois (DOIT être avant /api/weather/:city)
+app.get('/api/weather/multiple', async (req, res) => {
+  const { cities, customAlerts } = req.query;
+  
+  if (!cities) {
+    return res.status(400).json({ error: 'Paramètre cities requis' });
+  }
+
+  const cityList = cities.split(',').map(city => city.trim()).filter(Boolean);
+  
+  if (cityList.length === 0 || cityList.length > 8) {
+    return res.status(400).json({ error: 'Entre 1 et 8 villes maximum' });
+  }
+
+  const results = {
+    success: [],
+    errors: [],
+    data: {},
+    timestamp: Date.now()
+  };
+
+  let parsedCustomAlerts = null;
+  if (customAlerts) {
+    try {
+      parsedCustomAlerts = JSON.parse(decodeURIComponent(customAlerts));
+    } catch (e) {
+      console.error('Erreur parsing alertes personnalisées:', e);
+    }
+  }
+
+  // Traiter chaque ville en parallèle
+  await Promise.allSettled(
+    cityList.map(async (city) => {
+      try {
+        if (!validateCity(city)) {
+          throw new Error('Nom de ville invalide');
+        }
+
+        const cacheKey = `weather_${city.toLowerCase()}`;
+        let weatherData = cache.get(cacheKey);
+
+        if (!weatherData) {
+          const response = await axios.get(
+            `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=metric&appid=${process.env.OPENWEATHER_KEY}`,
+            { timeout: 8000 }
+          );
+          
+          if (response.data) {
+            const alerts = AlertService.detectAlerts(response.data, AlertService.DEFAULT_THRESHOLDS, parsedCustomAlerts);
+            weatherData = { ...response.data, alerts };
+            cache.set(cacheKey, weatherData);
+          }
+        }
+
+        if (weatherData) {
+          results.success.push(city);
+          results.data[city.toLowerCase()] = weatherData;
+        }
+      } catch (error) {
+        console.error(`Erreur pour ${city}:`, error.message);
+        results.errors.push({
+          city,
+          error: error.response?.status === 404 ? 'Ville non trouvée' : 'Erreur de récupération'
+        });
+      }
+    })
+  );
+
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.json(results);
+});
+
 // Route météo actuelle par ville
 app.get('/api/weather/:city', async (req, res, next) => {
   const city = req.params.city.trim();
-  // console.log('Requête météo ville:', city);
+  const customAlerts = req.query.customAlerts ? JSON.parse(decodeURIComponent(req.query.customAlerts)) : null;
 
   if (!validateCity(city)) {
-    // console.log('Validation échouée pour la ville:', city);
     return res.status(400).json({
       error: "Nom de ville invalide. Utilisez uniquement des lettres, des espaces, des tirets et des apostrophes."
     });
   }
 
-  const cacheKey = `weather_${city}`;
+  const cacheKey = `weather_${city}_${customAlerts ? JSON.stringify(customAlerts) : 'default'}`;
   const cachedData = cache.get(cacheKey);
   if (cachedData) {
-    // console.log('Données récupérées du cache pour', city);
     return res.json(cachedData);
   }
 
@@ -188,12 +275,19 @@ app.get('/api/weather/:city', async (req, res, next) => {
       throw new Error('Aucune donnée reçue de l\'API OpenWeather');
     }
 
-    cache.set(cacheKey, response.data);
+    // Ajouter les alertes avec alertes personnalisées
+    const alerts = AlertService.detectAlerts(response.data, AlertService.DEFAULT_THRESHOLDS, customAlerts);
+    const weatherWithAlerts = {
+      ...response.data,
+      alerts
+    };
+
+    cache.set(cacheKey, weatherWithAlerts);
 
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-    res.json(response.data);
+    res.json(weatherWithAlerts);
 
   } catch (error) {
     console.error('Erreur API OpenWeather:', error);
@@ -316,6 +410,37 @@ app.get('/api/forecast/:city', async (req, res) => {
     const errorResponse = { error: message };
     if (details) errorResponse.details = details;
     res.status(status).json(errorResponse);
+  }
+});
+
+
+
+
+
+// Route pour les tuiles radar météo
+app.get('/api/radar/:layer/:z/:x/:y', async (req, res) => {
+  const { layer, z, x, y } = req.params;
+  
+  const validLayers = ['precipitation_new', 'clouds_new', 'temp_new', 'wind_new'];
+  if (!validLayers.includes(layer)) {
+    return res.status(400).json({ error: 'Couche non valide' });
+  }
+  
+  try {
+    const tileUrl = `https://tile.openweathermap.org/map/${layer}/${z}/${x}/${y}.png?appid=${process.env.OPENWEATHER_KEY}`;
+    
+    const response = await axios.get(tileUrl, {
+      responseType: 'stream',
+      timeout: 5000
+    });
+    
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=600'); // Cache 10 minutes
+    response.data.pipe(res);
+    
+  } catch (error) {
+    console.error('Erreur tuile radar:', error.message);
+    res.status(404).send('Tuile non trouvée');
   }
 });
 
